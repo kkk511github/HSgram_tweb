@@ -1,12 +1,29 @@
 import convertToUint8Array from '@helpers/bytes/convertToUint8Array';
 import subtle from '@lib/crypto/subtle';
-// import sha256 from '@cryptography/sha256';
+import cryptoSha256 from '@cryptography/sha256';
+import bytesFromWordss from '@helpers/bytes/bytesFromWordss';
+
+function bytesToBinaryString(bytes: Uint8Array) {
+  const chunkSize = 0x8000;
+  let result = '';
+
+  for(let i = 0; i < bytes.length; i += chunkSize) {
+    result += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+
+  return result;
+}
 
 export default function sha256(bytes: Parameters<typeof convertToUint8Array>[0]) {
-  return subtle.digest('SHA-256', convertToUint8Array(bytes) as BufferSource).then((b) => {
-    // console.log('legacy', performance.now() - perfS);
-    return new Uint8Array(b);
-  });
+  const uint8Array = convertToUint8Array(bytes);
+  if(subtle) {
+    return subtle.digest('SHA-256', uint8Array as BufferSource).then((b) => {
+      // console.log('legacy', performance.now() - perfS);
+      return new Uint8Array(b);
+    });
+  }
+
+  return bytesFromWordss(cryptoSha256(bytesToBinaryString(uint8Array)));
   /* //console.log('SHA-256 hash start');
 
   let perfS = performance.now();

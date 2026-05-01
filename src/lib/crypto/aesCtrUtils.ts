@@ -4,34 +4,41 @@
  * https://github.com/morethanwords/tweb/blob/master/LICENSE
  */
 
-import CTR from '@lib/crypto/utils/aesCTR';
+import SubtleCTR from '@lib/crypto/utils/aesCTR';
+import JsCTR from '@lib/crypto/utils/aesCTRJs';
 import subtle from '@lib/crypto/subtle';
 
 const aesCTRs: Map<number, K> = new Map();
 let lastCTRId = -1;
 
 type K = {
-  enc: CTR,
-  dec: CTR,
+  enc: SubtleCTR | JsCTR,
+  dec: SubtleCTR | JsCTR,
 };
 
 export async function aesCtrPrepare({encKey, encIv, decKey, decIv}: {[k in 'encKey' | 'encIv' | 'decKey' | 'decIv']: Uint8Array}) {
   const id = ++lastCTRId;
 
-  const a = [['encrypt', encKey], ['decrypt', decKey]] as ['encrypt' | 'decrypt', Uint8Array][];
-  const promises = a.map(([mode, key]) => {
-    return subtle.importKey(
-      'raw',
-      key as BufferSource,
-      {name: 'AES-CTR'},
-      false,
-      [mode]
-    )
-  });
+  let enc: K['enc'], dec: K['dec'];
+  if(subtle) {
+    const a = [['encrypt', encKey], ['decrypt', decKey]] as ['encrypt' | 'decrypt', Uint8Array][];
+    const promises = a.map(([mode, key]) => {
+      return subtle.importKey(
+        'raw',
+        key as BufferSource,
+        {name: 'AES-CTR'},
+        false,
+        [mode]
+      )
+    });
 
-  const [encCryptoKey, decCryptoKey] = await Promise.all(promises);
-  const enc = new CTR('encrypt', encCryptoKey, encIv.slice());
-  const dec = new CTR('decrypt', decCryptoKey, decIv.slice());
+    const [encCryptoKey, decCryptoKey] = await Promise.all(promises);
+    enc = new SubtleCTR('encrypt', encCryptoKey, encIv.slice());
+    dec = new SubtleCTR('decrypt', decCryptoKey, decIv.slice());
+  } else {
+    enc = new JsCTR(encKey, encIv.slice(), undefined as unknown as CryptoKey);
+    dec = new JsCTR(decKey, decIv.slice(), undefined as unknown as CryptoKey);
+  }
 
   const k: K = {
     enc,
