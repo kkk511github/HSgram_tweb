@@ -52,7 +52,7 @@ export function getPeerColorsByPeer(peer: Chat | User) {
   return DialogColorsFg[colorIndex] ?? [];
 }
 
-function replaceColors(writeIn: typeof DialogColorsFg, peerColorOptions: HelpPeerColorOption[], dark?: boolean) {
+function replaceColors(writeIn: typeof DialogColorsFg, peerColorOptions: HelpPeerColorOption[] = [], dark?: boolean) {
   for(const peerColorOption of peerColorOptions) {
     const colorSet = (dark ? peerColorOption.dark_colors : peerColorOption.colors) as HelpPeerColorSet.helpPeerColorSet;
     const colors = colorSet?.colors;
@@ -87,7 +87,7 @@ export function makeColorsGradient(colors: string[], partSize?: number) {
   return `repeating-linear-gradient(-45deg, ${str})`;
 }
 
-export function setPeerColors(peerColorOptions: HelpPeerColorOption[], user: User.user) {
+export function setPeerColors(peerColorOptions: HelpPeerColorOption[] = [], user: User.user) {
   let newColors = replaceColors(_DialogColorsFg.slice(), peerColorOptions);
   if(themeController.isNight()) {
     newColors = replaceColors(newColors, peerColorOptions, true);
