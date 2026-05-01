@@ -125,8 +125,7 @@ export class UiNotificationsManager {
   }
 
   private async setNotificationCount(valueOrFn: number | ((prev: number) => number), accountNumber: ActiveAccountNumber) {
-    // * make it safe to call from multiple tabs
-    await navigator.locks.request('notificationsCount', async() => {
+    const update = async() => {
       const notificationsCount = await this.getNotificationsCountForAllAccounts();
 
       let newValue = valueOrFn instanceof Function ?
@@ -144,7 +143,14 @@ export class UiNotificationsManager {
         }
       });
       rootScope.dispatchEvent('notification_count_update');
-    });
+    };
+
+    // * make it safe to call from multiple tabs when the Web Locks API is available.
+    if(navigator.locks) {
+      await navigator.locks.request('notificationsCount', update);
+    } else {
+      await update();
+    }
   }
 
   construct() {
