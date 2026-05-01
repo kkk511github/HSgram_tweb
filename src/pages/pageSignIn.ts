@@ -166,7 +166,8 @@ const onFirstMount = () => {
           break;
         default:
           console.error('auth.sendCode error:', err);
-          btnNext.innerText = err.type;
+          telInputField.setError('Error.AnError');
+          replaceContent(btnNext, i18n('Login.Next'));
           break;
       }
     });

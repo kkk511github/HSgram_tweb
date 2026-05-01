@@ -56,6 +56,7 @@ const defaultOperationTimeout = 15e3;
 const minimalBlockingIterationTotalTimeout = defaultOperationTimeout; // make sure this is at least a few seconds if the default one gets modified
 
 const minimalBlockingAllowedTimePerBulk = 4;
+const isCacheStorageSupported = typeof caches !== 'undefined';
 
 type MinimalBlockingIterateResponsesCallbackArgs = {
   request: Request;
@@ -70,7 +71,7 @@ export default class CacheStorageController implements FileStorage {
   private openDbPromise: Promise<Cache>;
   private config: CacheStorageDbConfigEntry;
 
-  private useStorage = true;
+  private useStorage = isCacheStorageSupported;
 
   private static disabledPromise: CancellablePromise<void>;
 
@@ -89,7 +90,13 @@ export default class CacheStorageController implements FileStorage {
 
     this.config = Object.entries(cacheStorageDbConfig).find(([name]) => name === dbName)?.[1];
 
-    this.openDatabase();
+    if(this.useStorage) {
+      this.openDatabase().catch(() => {
+        this.useStorage = false;
+        this.openDbPromise = undefined;
+      });
+    }
+
     CacheStorageController.STORAGES.push(this);
   }
 
@@ -151,10 +158,18 @@ export default class CacheStorageController implements FileStorage {
   }
 
   private openDatabase(): Promise<Cache> {
+    if(!isCacheStorageSupported) {
+      return Promise.reject(makeError('STORAGE_OFFLINE'));
+    }
+
     return this.openDbPromise ?? (this.openDbPromise = caches.open(this.dbName));
   }
 
   public delete(entryName: string) {
+    if(!this.useStorage) {
+      return Promise.resolve(false);
+    }
+
     return this.timeoutOperation((cache) => cache.delete('/' + entryName));
   }
 
@@ -163,6 +178,10 @@ export default class CacheStorageController implements FileStorage {
    */
   public deleteAll() {
     this.openDbPromise = undefined;
+    if(!isCacheStorageSupported) {
+      return Promise.resolve(false);
+    }
+
     return caches.delete(this.dbName);
   }
 
@@ -171,6 +190,10 @@ export default class CacheStorageController implements FileStorage {
   }
 
   public async minimalBlockingIterateResponses(callback: (args: MinimalBlockingIterateResponsesCallbackArgs) => void | Promise<void>) {
+    if(!this.useStorage) {
+      return;
+    }
+
     await this.waitToEnable();
 
     const batchSize = 10;
@@ -200,11 +223,19 @@ export default class CacheStorageController implements FileStorage {
   }
 
   public async has(entryName: string) {
+    if(!this.useStorage) {
+      return false;
+    }
+
     const response = await this.timeoutOperation((cache) => cache.match('/' + entryName));
     return !!response;
   }
 
   public async get(entryName: string) {
+    if(!this.useStorage) {
+      return undefined;
+    }
+
     await this.waitToEnable();
 
     const response = await this.timeoutOperation((cache) => cache.match('/' + entryName));
@@ -225,6 +256,10 @@ export default class CacheStorageController implements FileStorage {
   }
 
   public async save({entryName, response, size, contentType}: SaveArgs) {
+    if(!this.useStorage) {
+      return;
+    }
+
     await this.waitToEnable();
 
     // Avoids modifying read-only headers (e.g. the response returned from `fetch`)
@@ -333,7 +368,7 @@ export default class CacheStorageController implements FileStorage {
 
   public static toggleStorage(enabled: boolean, _clearWrite: boolean) {
     this.STORAGES.forEach((storage) => {
-      storage.useStorage = enabled;
+      storage.useStorage = enabled && isCacheStorageSupported;
     });
     return Promise.resolve();
   }
