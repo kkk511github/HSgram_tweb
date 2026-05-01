@@ -798,7 +798,7 @@ export default class AppStoriesManager extends AppManager {
         assumeType<StoriesAllStories.storiesAllStories>(storiesAllStories);
         this.appPeersManager.saveApiPeers(storiesAllStories);
 
-        storiesAllStories.peer_stories = storiesAllStories.peer_stories
+        storiesAllStories.peer_stories = (storiesAllStories.peer_stories || [])
         .map((peerStories) => this.savePeerStories(peerStories))
         .filter((peerStories) => peerStories.stories.length);
 
