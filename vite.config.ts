@@ -9,7 +9,7 @@ import checker from 'vite-plugin-checker';
 // import devtools from 'solid-devtools/vite'
 import autoprefixer from 'autoprefixer';
 import {resolve} from 'path';
-import {existsSync, copyFileSync} from 'fs';
+import {cpSync, existsSync, copyFileSync, mkdirSync} from 'fs';
 import {ServerOptions} from 'vite';
 import {watchLangFile} from './watch-lang.js';
 import path from 'path';
@@ -18,6 +18,8 @@ const rootDir = resolve(__dirname);
 const certsDir = path.join(rootDir, 'certs');
 const ENV_LOCAL_FILE_PATH = path.join(rootDir, '.env.local');
 const LANG_PACK_LOCAL_FILE_PATH = path.join(rootDir, 'src', 'langPackLocalVersion.ts');
+const PUBLIC_FONTS_DIR = path.join(rootDir, 'public', 'assets', 'fonts');
+const BUILD_FONTS_DIR = path.join(rootDir, 'dist', 'assets', 'fonts');
 
 const isDEV = process.env.NODE_ENV === 'development';
 if(!existsSync(LANG_PACK_LOCAL_FILE_PATH)) {
@@ -40,6 +42,21 @@ const handlebarsPlugin = handlebars({
     origin: 'https://web.telegram.org/'
   }
 });
+
+function copyPublicFontsPlugin() {
+  return {
+    name: 'copy-public-fonts',
+    apply: 'build' as const,
+    closeBundle() {
+      if(!existsSync(PUBLIC_FONTS_DIR)) {
+        return;
+      }
+
+      mkdirSync(BUILD_FONTS_DIR, {recursive: true});
+      cpSync(PUBLIC_FONTS_DIR, BUILD_FONTS_DIR, {recursive: true});
+    }
+  };
+}
 
 const USE_SSL = false;
 const USE_SIGNED_CERTS = USE_SSL && true;
@@ -118,6 +135,7 @@ export default defineConfig({
     }),
     solidPlugin(),
     handlebarsPlugin as any,
+    copyPublicFontsPlugin(),
     USE_SELF_SIGNED_CERTS ? basicSsl(BASIC_SSL_CONFIG) : undefined,
     visualizer({
       gzipSize: true,
