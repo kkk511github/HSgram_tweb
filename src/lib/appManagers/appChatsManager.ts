@@ -434,6 +434,7 @@ export class AppChatsManager extends AppManager {
       this.apiUpdatesManager.processUpdateMessage(updates);
 
       const channelId = (updates as any).chats[0].id;
+      void this.appMessagesManager.reloadConversation(channelId.toPeerId(true));
       return channelId;
     });
   }
@@ -465,6 +466,7 @@ export class AppChatsManager extends AppManager {
       });
 
       this.onChatUpdatedForce(id, messagesInvitedUsers.updates);
+      void this.appMessagesManager.reloadConversation(id.toPeerId(true));
       return messagesInvitedUsers.missing_invitees;
     });
   }

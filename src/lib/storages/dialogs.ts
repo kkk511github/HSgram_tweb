@@ -1264,6 +1264,10 @@ export default class DialogsStorage extends AppManager {
           } else {
             cache.dialog = dialog as Dialog;
           }
+
+          if(result._ === 'messages.peerDialogs') {
+            this.appMessagesManager.scheduleHandleNewDialogs(peerId, dialog);
+          }
         }
       } else {
         this.dropDialogWithEvent(peerId, dialogKey);

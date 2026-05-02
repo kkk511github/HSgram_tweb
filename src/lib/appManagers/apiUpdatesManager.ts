@@ -180,6 +180,27 @@ class ApiUpdatesManager {
     });
   }
 
+  private getUpdatePriority(update: Update) {
+    switch(update._) {
+      case 'updateMessageID':
+        return 0;
+      case 'updateNewMessage':
+      case 'updateNewChannelMessage':
+      case 'updateEditMessage':
+      case 'updateEditChannelMessage':
+        return 1;
+      default:
+        return 2;
+    }
+  }
+
+  private getOrderedUpdates(updates: Update[]) {
+    return updates
+    .map((update, index) => ({update, index, priority: this.getUpdatePriority(update)}))
+    .sort((a, b) => (a.priority - b.priority) || (a.index - b.index))
+    .map(({update}) => update);
+  }
+
   public processUpdateMessage = (updateMessage: any, options: Partial<{
     override: boolean,
     ignoreSyncLoading: boolean,
@@ -243,7 +264,7 @@ class ApiUpdatesManager {
         this.appUsersManager.saveApiUsers(updateMessage.users, options.override);
         this.appChatsManager.saveApiChats(updateMessage.chats, options.override);
 
-        updateMessage.updates.forEach((update: Update) => {
+        this.getOrderedUpdates(updateMessage.updates).forEach((update: Update) => {
           this.processUpdate(update, processOpts);
         });
         break;
@@ -511,6 +532,14 @@ class ApiUpdatesManager {
       case 'updateChannelTooLong':
         channelId = update.channel_id;
         if(!(channelId in this.channelStates)) {
+          if(this.appChatsManager.hasChat(channelId)) {
+            if((update as Update.updateChannelTooLong).pts) {
+              this.addChannelState(channelId, (update as Update.updateChannelTooLong).pts);
+            }
+
+            this.saveUpdate({_: 'updateChannelReload', channel_id: channelId});
+          }
+
           return false;
         }
         break;
@@ -522,7 +551,14 @@ class ApiUpdatesManager {
     }
 
     const {pts, pts_count} = update as Update.updateNewMessage;
-    const curState = channelId ? this.getChannelState(channelId, pts) : this.updatesState;
+    const hasChannelState = channelId ? this.channelStates[channelId] !== undefined : false;
+    const initialPts = (
+      channelId &&
+      !hasChannelState &&
+      pts &&
+      pts_count
+    ) ? (pts - pts_count) : pts;
+    const curState = channelId ? this.getChannelState(channelId, initialPts) : this.updatesState;
 
     const log = this.log.bindPrefix(`processUpdate${channelId ? `-${channelId}` : ''}`);
     log('process', curState.pts, copy(update));
