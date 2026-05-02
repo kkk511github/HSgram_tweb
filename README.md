@@ -19,6 +19,8 @@ Open http://localhost:8080/ in your browser.
 
 Run `node build` to build the minimized production version of the app. Copy `public` folder contents to your web server.
 
+For HSgram Server deployment, WebSocket proxying, cache refresh, and custom feature checks, see [docs/hsgram-server-deploy.md](/docs/hsgram-server-deploy.md).
+
 ### Running in docker
 
 #### Developing: 

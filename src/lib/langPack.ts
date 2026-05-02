@@ -104,22 +104,42 @@ namespace I18n {
     isRTL = rtl;
   }
 
+  function normalizeLangCodeForIntl(langCode: string) {
+    const lowerLangCode = langCode.toLowerCase();
+    if(lowerLangCode === 'classic-zh-cn' || lowerLangCode.startsWith('zh')) {
+      return 'zh-CN';
+    }
+
+    return langCode.split('-')[0];
+  }
+
   function setLangCode(langCode: string) {
     lastRequestedLangCode = langCode;
-    lastRequestedNormalizedLangCode = langCode.split('-')[0];
+    lastRequestedNormalizedLangCode = normalizeLangCodeForIntl(langCode);
     setLangCodeNormalized(lastRequestedNormalizedLangCode.split('-')[0] as any);
   }
 
   export function getCacheLangPack(dontLoadLocal?: boolean) {
     return Promise.all([
-      commonStateStorage.get('langPack').then((langPack) => langPack || (dontLoadLocal ? undefined : loadLocalLangPack())),
+      commonStateStorage.get('langPack').then((langPack) => {
+        if(
+          !dontLoadLocal &&
+          (!langPack ||
+            langPack.lang_code !== App.langPackCode ||
+            langPack.localVersion !== App.langPackLocalVersion)
+        ) {
+          return loadLocalLangPack();
+        }
+
+        return langPack || (dontLoadLocal ? undefined : loadLocalLangPack());
+      }),
       polyfillPromise
     ]).then(([langPack]) => langPack);
   }
 
   export function getCacheLangPackAndApply() {
     return cacheLangPackPromise ||= getCacheLangPack(true).then(async(langPack) => {
-      if(!langPack) {
+      if(!langPack || langPack.lang_code !== App.langPackCode || langPack.localVersion !== App.langPackLocalVersion) {
         langPack = await loadLocalLangPack();
         langPack = await saveLangPack(langPack, false);
       }
@@ -174,9 +194,10 @@ namespace I18n {
 
   export function loadLocalLangPack() {
     const defaultCode = App.langPackCode;
+    const isChinese = defaultCode === 'classic-zh-cn';
     return Promise.all([
-      import('../lang'),
-      import('../langSign'),
+      isChinese ? import('../lang.zh-cn') : import('../lang'),
+      isChinese ? import('../langSign.zh-cn') : import('../langSign'),
       import('../countries')
     ]).then(([lang, langSign, countries]) => {
       const strings: LangPackString[] = [];
@@ -199,11 +220,12 @@ namespace I18n {
   export function loadLangPack(langCode: string, web?: boolean, ignoreCache?: boolean) {
     web = true;
     const managers = rootScope.managers;
+    const useLocalChinese = langCode === 'classic-zh-cn' || langCode.startsWith('zh');
     return Promise.all([
       managers.appLangPackManager.getLangPack(langCode, web ? 'web' : App.langPack, ignoreCache),
       !web && managers.appLangPackManager.getLangPack(langCode, 'android', ignoreCache),
-      import('../lang'),
-      import('../langSign'),
+      useLocalChinese ? import('../lang.zh-cn') : import('../lang'),
+      useLocalChinese ? import('../langSign.zh-cn') : import('../langSign'),
       managers.appLangPackManager.getCountriesList(langCode, ignoreCache),
       polyfillPromise
     ]);
@@ -284,13 +306,6 @@ namespace I18n {
     } catch(err) {
       console.error('pluralRules error', err);
       pluralRules = new Intl.PluralRules(lastRequestedNormalizedLangCode.split('-', 1)[0]);
-    }
-
-    try {
-      pluralRules = new Intl.PluralRules(langPack.lang_code);
-    } catch(err) {
-      console.error('pluralRules error', err);
-      pluralRules = new Intl.PluralRules(langPack.lang_code.split('-', 1)[0]);
     }
 
     strings.clear();

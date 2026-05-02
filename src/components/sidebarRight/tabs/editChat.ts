@@ -48,6 +48,10 @@ import {appSettings} from '@stores/appSettings';
 import {handleChannelsTooMuch} from '@components/popups/channelsTooMuch';
 import {isParticipantAdmin} from '@lib/appManagers/utils/chats/isParticipantAdmin';
 
+const DISABLE_SOCIAL_ACTIONS_REQUEST_MSG_ID = -10086;
+const SOCIAL_ACTIONS_PARTICIPANTS_VERSION_ON = -10086;
+const SOCIAL_ACTIONS_PARTICIPANTS_VERSION_OFF = -10087;
+
 export default class AppEditChatTab extends SliderSuperTab {
   private chatNameInputField: InputField;
   private descriptionInputField: InputField;
@@ -118,6 +122,24 @@ export default class AppEditChatTab extends SliderSuperTab {
 
     const peerId = this.chatId.toPeerId(true);
     const isAdmin = hasRights(chat, 'just_admin');
+    const getChatParticipants = () => (chatFull as ChatFull.chatFull).participants as ChatParticipants.chatParticipants;
+    const isDisableSocialActionsEnabled = () => {
+      const participants = getChatParticipants();
+      return !!chatFull.pFlags.translations_disabled ||
+        (participants?._ === 'chatParticipants' && participants.version === SOCIAL_ACTIONS_PARTICIPANTS_VERSION_ON);
+    };
+    const setDisableSocialActionsState = (enabled: boolean) => {
+      if(enabled) {
+        chatFull.pFlags.translations_disabled = true;
+      } else {
+        delete chatFull.pFlags.translations_disabled;
+      }
+
+      const participants = getChatParticipants();
+      if(participants?._ === 'chatParticipants') {
+        participants.version = enabled ? SOCIAL_ACTIONS_PARTICIPANTS_VERSION_ON : SOCIAL_ACTIONS_PARTICIPANTS_VERSION_OFF;
+      }
+    };
 
     {
       const section = new SettingSection({noDelimiter: true, caption: 'PeerInfo.SetAboutDescription'});
@@ -321,6 +343,48 @@ export default class AppEditChatTab extends SliderSuperTab {
         setEnabledStatus();
         addChatUpdateListener(setEnabledStatus, 'basic');
         section.content.append(directMessagesRow.container);
+      }
+
+      if(canChangeInfo && !isBroadcast && isAdmin) {
+        const section = new SettingSection({
+          name: 'HSgram.DisableSocialActions.Section',
+          caption: 'HSgram.DisableSocialActions.Caption'
+        });
+        const checkboxField = new CheckboxField({toggle: true});
+        const disableSocialActionsRow = new Row({
+          titleLangKey: 'HSgram.DisableSocialActions.Title',
+          checkboxField,
+          icon: 'lock',
+          listenerSetter: this.listenerSetter
+        });
+
+        const setDisableSocialActionsCheckbox = () => {
+          checkboxField.setValueSilently(isDisableSocialActionsEnabled());
+        };
+
+        this.listenerSetter.add(checkboxField.input)('change', (e) => {
+          if(!e.isTrusted) {
+            return;
+          }
+
+          const enabled = checkboxField.checked;
+          const previous = !enabled;
+          const toggle = disableSocialActionsRow.toggleDisability(true);
+          this.managers.appProfileManager.toggleNoForwards(peerId, enabled, DISABLE_SOCIAL_ACTIONS_REQUEST_MSG_ID).then(() => {
+            setDisableSocialActionsState(enabled);
+            setDisableSocialActionsCheckbox();
+          }).catch((err) => {
+            console.error('toggle disable social actions failed', err);
+            setDisableSocialActionsState(previous);
+            checkboxField.setValueSilently(previous);
+            toastNew({langPackKey: 'Error.AnError'});
+          }).finally(toggle);
+        });
+
+        setDisableSocialActionsCheckbox();
+        addChatUpdateListener(setDisableSocialActionsCheckbox, 'full');
+        section.content.append(disableSocialActionsRow.container);
+        this.scrollable.append(section.container);
       }
 
       if(canChangePermissions && !isBroadcast) {

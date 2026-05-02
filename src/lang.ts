@@ -4511,7 +4511,11 @@ const lang = {
   'ArchiveFeatureDetails.Hide.Subtitle': 'Right-click on the Archive and choose **%s**. You can always access it from the main menu.',
   'ArchiveFeatureDetails.Stories.Title': 'Stories',
   'ArchiveFeatureDetails.Stories.Subtitle': 'Archive Stories from your contacts separately from chats with them.',
-  'ArchiveFeatureDetails.Button': 'Got it'
+  'ArchiveFeatureDetails.Button': 'Got it',
+  'HSgram.DisableSocialActions.Section': 'Member Interaction',
+  'HSgram.DisableSocialActions.Title': 'Disable Private Chats',
+  'HSgram.DisableSocialActions.Caption': 'When enabled, regular members cannot open member profiles to start private chats, and mentions are limited to admins.',
+  'HSgram.DisableSocialActions.Blocked': 'Private chats are disabled in this group'
 };
 
 export default lang;
