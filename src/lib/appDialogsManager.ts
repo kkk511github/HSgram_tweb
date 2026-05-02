@@ -1826,29 +1826,9 @@ export class AppDialogsManager {
     const setWillOpenStory = (e: Event) => willOpenStory = !isOpeningStoriesDisabled() && !!getOpenStoryCallback(e.target);
 
     list.dataset.autonomous = '' + +autonomous;
-    list.addEventListener('mousedown', (e) => {
-      if(
-        e.button !== 0 ||
-        setWillOpenStory(e)
-      ) {
-        return;
-      }
+    let handledPointerDownClick = false;
 
-      this.log('dialogs click list');
-      const target = e.target as HTMLElement;
-
-      const archiveElem = findUpTag(target, archiveDialogTagName);
-      if(archiveElem) {
-        appSidebarLeft.openArchiveTab();
-        return;
-      }
-
-      const elem = findUpTag(target, DIALOG_LIST_ELEMENT_TAG);
-
-      if(!elem) {
-        return;
-      }
-
+    const openDialogFromEvent = (e: MouseEvent, elem: HTMLElement) => {
       const peerId = elem.dataset.peerId.toPeerId();
       const lastMsgId = +elem.dataset.mid || undefined;
       const threadId = +elem.dataset.threadId || undefined;
@@ -1870,12 +1850,12 @@ export class AppDialogsManager {
           if(!IS_TOUCH_SUPPORTED) {
             simulateClickEvent(chip as HTMLElement);
           }
-          return;
+          return true;
         }
       }
 
       if(onFound?.(elem) === false) {
-        return;
+        return true;
       }
 
       const peer = apiManagerProxy.getPeer(peerId);
@@ -1894,7 +1874,7 @@ export class AppDialogsManager {
         this.toggleForumTabByPeerId(peerId).then(() => {
           if(appImManager.chat?.peerId?.toChatId() !== linkedChat?.id && !mediaSizes.isLessThanFloatingLeftSidebar) openChat();
         });
-        return;
+        return true;
       }
 
 
@@ -1902,20 +1882,20 @@ export class AppDialogsManager {
         this.toggleForumTabByPeerId(peerId).then(() => {
           if(appImManager.chat?.peerId?.toUserId() !== peer.id && !mediaSizes.isLessThanFloatingLeftSidebar) openChat();
         });
-        return;
+        return true;
       }
 
       const isForum = !!elem.querySelector('.is-forum');
       if(isForum && !e.shiftKey && !lastMsgId) {
         this.toggleForumTabByPeerId(peerId, undefined, false);
-        return;
+        return true;
       }
 
       if(e.ctrlKey || e.metaKey) {
         // TODO: How about opening a monoforum in new tab?
         this.openDialogInNewTab(elem);
         cancelEvent(e);
-        return;
+        return true;
       }
 
       if(autonomous) {
@@ -1940,6 +1920,37 @@ export class AppDialogsManager {
       }
 
       openChat();
+
+      return true;
+    };
+
+    list.addEventListener('mousedown', (e) => {
+      handledPointerDownClick = false;
+
+      if(
+        e.button !== 0 ||
+        setWillOpenStory(e)
+      ) {
+        return;
+      }
+
+      this.log('dialogs click list');
+      const target = e.target as HTMLElement;
+
+      const archiveElem = findUpTag(target, archiveDialogTagName);
+      if(archiveElem) {
+        appSidebarLeft.openArchiveTab();
+        handledPointerDownClick = true;
+        return;
+      }
+
+      const elem = findUpTag(target, DIALOG_LIST_ELEMENT_TAG);
+
+      if(!elem) {
+        return;
+      }
+
+      handledPointerDownClick = openDialogFromEvent(e, elem);
     }, {capture: true});
 
     // cancel link click
@@ -1948,6 +1959,16 @@ export class AppDialogsManager {
       if(e.button === 0) {
         cancelEvent(e);
       }
+
+      if(e.button === 0 && !handledPointerDownClick && !willOpenStory) {
+        const elem = findUpTag(e.target as HTMLElement, DIALOG_LIST_ELEMENT_TAG);
+        if(elem) {
+          this.log('dialogs click fallback');
+          openDialogFromEvent(e, elem);
+        }
+      }
+
+      handledPointerDownClick = false;
 
       if(!willOpenStory || isOpeningStoriesDisabled()) return;
 
