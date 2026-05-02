@@ -36,10 +36,11 @@ export default class InputFieldAnimated extends InputField {
     // this.wasInputFakeClientHeight = 0;
     // this.showScrollDebounced = debounce(() => this.input.classList.remove('no-scrollbar'), 150, false, true);
     this.inputFake = document.createElement('div');
-    // this.inputFake.contentEditable = 'true';
-    this.inputFake.contentEditable = 'true';
+    this.inputFake.contentEditable = 'false';
+    this.inputFake.setAttribute('aria-hidden', 'true');
     this.inputFake.tabIndex = -1;
     this.inputFake.className = this.input.className + ' input-field-input-fake';
+    this.inputFake.style.pointerEvents = 'none';
   }
 
   public onFakeInput(setHeight = true, noAnimation?: boolean) {

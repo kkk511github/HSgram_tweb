@@ -84,16 +84,6 @@ export class AppManagersManager {
       4: new AppStateManager(4)
     };
 
-    const managersByAccountAsArray = Object.values(this.stateManagersByAccount)
-
-    managersByAccountAsArray.forEach((stateManager) => {
-      stateManager.onSettingsUpdate = (settingsValue) => {
-        managersByAccountAsArray.forEach((stateManagerToUpdate) => {
-          if(stateManager !== stateManagerToUpdate)
-            stateManagerToUpdate.updateLocalState('settings', settingsValue);
-        });
-      }
-    })
   }
 
   public start() {

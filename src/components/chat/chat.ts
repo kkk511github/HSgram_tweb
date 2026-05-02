@@ -1552,10 +1552,11 @@ export default class Chat extends EventListenerBase<{
     }
   }
 
-  public updateStarsAmount(starsAmount: number) {
-    this.starsAmount = starsAmount;
-    this.input.setStarsAmount(starsAmount);
-    getCurrentNewMediaPopup()?.setStarsAmount(starsAmount);
+  public updateStarsAmount(starsAmount: number | undefined) {
+    const normalizedStarsAmount = Number.isFinite(starsAmount) && starsAmount > 0 ? starsAmount : undefined;
+    this.starsAmount = normalizedStarsAmount;
+    this.input.setStarsAmount(normalizedStarsAmount);
+    getCurrentNewMediaPopup()?.setStarsAmount(normalizedStarsAmount);
   }
 
   public async getAutoDeletePeriod(): Promise<AckedResult<number>> {

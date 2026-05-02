@@ -36,6 +36,42 @@ let codeInputField: CodeInputFieldCompat;
 let codeInputErrorLabel: HTMLElement;
 let resetEmailElement: HTMLDivElement, resetEmailTimer: number;
 let monkey: TrackingMonkey, player: RLottiePlayer;
+let signInGeneration = 0;
+
+const AUTH_REQUEST_TIMEOUT_MS = 90000;
+const AUTH_REQUEST_TIMEOUT = 'AUTH_REQUEST_TIMEOUT';
+
+const withAuthTimeout = <T>(request: () => Promise<T>) => {
+  let timeoutId: number;
+  const requestPromise = Promise.resolve().then(request);
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject({type: AUTH_REQUEST_TIMEOUT}), AUTH_REQUEST_TIMEOUT_MS);
+  });
+
+  return Promise.race([requestPromise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+};
+
+const resetCodeSubmitState = (invalidatePendingRequest = false, clearError = true) => {
+  if(invalidatePendingRequest) {
+    ++signInGeneration;
+  }
+
+  if(!codeInputField) {
+    return;
+  }
+
+  codeInputField.disabled = false;
+
+  if(clearError) {
+    codeInputField.error = false;
+  }
+
+  if(clearError && codeInputErrorLabel) {
+    replaceContent(codeInputErrorLabel, '');
+  }
+};
 
 const cleanup = () => {
   setTimeout(() => {
@@ -47,6 +83,7 @@ const cleanup = () => {
 };
 
 const submitCode = (code: string) => {
+  const generation = ++signInGeneration;
   codeInputField.disabled = true;
 
   const params: AuthSignIn = {
@@ -57,9 +94,12 @@ const submitCode = (code: string) => {
 
   // console.log('invoking auth.signIn with params:', params);
 
-  rootScope.managers.apiManager.invokeApi('auth.signIn', params, {ignoreErrors: true})
+  withAuthTimeout(() => rootScope.managers.apiManager.invokeApi('auth.signIn', params, {ignoreErrors: true}))
   .then(async(response) => {
     // console.log('auth.signIn response:', response);
+    if(generation !== signInGeneration) {
+      return;
+    }
 
     switch(response._) {
       case 'auth.authorization':
@@ -82,11 +122,17 @@ const submitCode = (code: string) => {
 
         cleanup();
         break;
+      default:
+        throw {type: (response as any)?._ || 'AUTH_RESPONSE_UNEXPECTED'};
       /* default:
         codeInput.innerText = response._;
         break; */
     }
   }).catch(async(err) => {
+    if(generation !== signInGeneration) {
+      return;
+    }
+
     let good = false;
     switch(err.type) {
       case 'SESSION_PASSWORD_NEEDED':
@@ -106,13 +152,17 @@ const submitCode = (code: string) => {
         codeInputField.error = true;
         replaceContent(codeInputErrorLabel, i18n('PHONE_CODE_INVALID'));
         break;
+      case AUTH_REQUEST_TIMEOUT:
+        codeInputField.error = true;
+        replaceContent(codeInputErrorLabel, '登录超时，请检查网络后重试');
+        break;
       default:
         codeInputField.error = true;
         replaceContent(codeInputErrorLabel, err.type);
         break;
     }
 
-    codeInputField.disabled = false;
+    resetCodeSubmitState(false, false);
 
     if(!good) {
       codeInputField.value = '';
@@ -269,6 +319,7 @@ const render = () => {
   }
 
   codeInputField.options.length = CODE_LENGTH;
+  resetCodeSubmitState(true);
 
   headerElement.innerText = authSentCode.phone_number;
   if(!resetEmailElement) {

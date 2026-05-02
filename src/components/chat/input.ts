@@ -163,6 +163,10 @@ import {Middleware, getMiddleware, MiddlewareHelper} from '@helpers/middleware';
 
 const RECORD_MIN_TIME = 500;
 const REPLY_IN_TOPIC = false;
+const isCompositionInputEvent = (e?: Event) => {
+  const inputEvent = e as InputEvent;
+  return !!inputEvent && (inputEvent.isComposing || inputEvent.inputType === 'insertCompositionText');
+};
 
 export const POSTING_NOT_ALLOWED_MAP: {[action in ChatRights]?: LangPackKey} = {
   send_voices: 'GlobalAttachVoiceRestricted',
@@ -221,6 +225,7 @@ export default class ChatInput {
   private btnAutoDeletePeriod: HTMLElement;
 
   private sendMenu: SendMenu;
+  private isMessageInputComposing = false;
 
   private replyElements: {
     container: HTMLElement,
@@ -2580,6 +2585,10 @@ export default class ChatInput {
 
   private attachMessageInputListeners() {
     this.listenerSetter.add(this.messageInput)('keydown', (e) => {
+      if(e.isComposing || e.key === 'Process' || e.keyCode === 229) {
+        return;
+      }
+
       const key = e.key;
 
       if(isSendShortcutPressed(e)) {
@@ -2697,6 +2706,13 @@ export default class ChatInput {
         }
       }
     }); */
+    this.listenerSetter.add(this.messageInput)('compositionstart', () => {
+      this.isMessageInputComposing = true;
+    });
+    this.listenerSetter.add(this.messageInput)('compositionend', () => {
+      this.isMessageInputComposing = false;
+      setTimeout(() => this.onMessageInput(), 0);
+    });
     this.listenerSetter.add(this.messageInput)('input', this.onMessageInput);
     this.listenerSetter.add(this.messageInput)('keyup', () => {
       this.checkAutocomplete();
@@ -2727,6 +2743,10 @@ export default class ChatInput {
   }
 
   public onMessageInput = (e?: Event) => {
+    if(this.isMessageInputComposing || isCompositionInputEvent(e)) {
+      return;
+    }
+
     // * validate due to manual formatting through browser's context menu
     /* const inputType = (e as InputEvent).inputType;
     console.log('message input event', e);
@@ -3689,7 +3709,7 @@ export default class ChatInput {
   }
 
   public async setStarsAmount(starsAmount: number | undefined) {
-    this.starsState.set({starsAmount});
+    this.starsState.set({starsAmount: Number.isFinite(starsAmount) && starsAmount > 0 ? starsAmount : 0});
 
     // TODO: review this `|| true` WTF?
     const params = await this.getPlaceholderParams(await this.chat?.canSend('send_plain') || true);

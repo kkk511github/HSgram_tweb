@@ -29,6 +29,7 @@ const onFirstMount = async() => {
   const imageDiv = pageElement.querySelector('.auth-image') as HTMLDivElement;
 
   let preloader = putPreloader(imageDiv, true);
+  let stop = false;
 
   const inputWrapper = document.createElement('div');
   inputWrapper.classList.add('input-wrapper');
@@ -66,7 +67,6 @@ const onFirstMount = async() => {
   ]);
   const QRCodeStyling = results[0].default;
 
-  let stop = false;
   rootScope.addEventListener('user_auth', (auth) => {
     stop = true;
     cachedPromise = null;

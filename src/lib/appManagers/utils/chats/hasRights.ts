@@ -46,6 +46,25 @@ export default function hasRights(
     rights = chat.admin_rights || (chat as Chat.channel).banned_rights || chat.default_banned_rights;
 
     if(!rights) {
+      switch(action) {
+        case 'embed_links':
+        case 'send_games':
+        case 'send_gifs':
+        case 'send_inline':
+        case 'send_media':
+        case 'send_messages':
+        case 'send_polls':
+        case 'send_stickers':
+        case 'send_photos':
+        case 'send_videos':
+        case 'send_roundvideos':
+        case 'send_audios':
+        case 'send_voices':
+        case 'send_docs':
+        case 'send_plain':
+          return chat._ !== 'channel' || !!chat.pFlags.megagroup;
+      }
+
       return false;
     }
   }

@@ -20,6 +20,17 @@ const ENV_LOCAL_FILE_PATH = path.join(rootDir, '.env.local');
 const LANG_PACK_LOCAL_FILE_PATH = path.join(rootDir, 'src', 'langPackLocalVersion.ts');
 const PUBLIC_FONTS_DIR = path.join(rootDir, 'public', 'assets', 'fonts');
 const BUILD_FONTS_DIR = path.join(rootDir, 'dist', 'assets', 'fonts');
+const PUBLIC_STATIC_ASSETS = [
+  ['assets', 'audio'],
+  ['assets', 'img'],
+  ['rlottie-wasm.wasm'],
+  ['site_apple.webmanifest'],
+  ['encoderWorker.min.js'],
+  ['encoderWorker.min.wasm'],
+  ['decoderWorker.min.js'],
+  ['decoderWorker.min.wasm'],
+  ['waveWorker.min.js']
+];
 
 const isDEV = process.env.NODE_ENV === 'development';
 if(!existsSync(LANG_PACK_LOCAL_FILE_PATH)) {
@@ -45,7 +56,7 @@ const handlebarsPlugin = handlebars({
 
 function copyPublicFontsPlugin() {
   return {
-    name: 'copy-public-fonts',
+    name: 'copy-public-static-assets',
     apply: 'build' as const,
     closeBundle() {
       if(!existsSync(PUBLIC_FONTS_DIR)) {
@@ -54,6 +65,17 @@ function copyPublicFontsPlugin() {
 
       mkdirSync(BUILD_FONTS_DIR, {recursive: true});
       cpSync(PUBLIC_FONTS_DIR, BUILD_FONTS_DIR, {recursive: true});
+
+      for(const parts of PUBLIC_STATIC_ASSETS) {
+        const source = path.join(rootDir, 'public', ...parts);
+        if(!existsSync(source)) {
+          continue;
+        }
+
+        const target = path.join(rootDir, 'dist', ...parts);
+        mkdirSync(path.dirname(target), {recursive: true});
+        cpSync(source, target, {recursive: true});
+      }
     }
   };
 }

@@ -281,7 +281,7 @@ export class AppImManager extends EventListenerBase<{
     this.chatsSelectTab(this.chat);
 
     appNavigationController.onHashChange = this.onHashChange;
-    // window.addEventListener('hashchange', this.onHashChange);
+    window.addEventListener('hashchange', () => this.onHashChange());
 
     this.setSettings();
     rootScope.addEventListener('settings_updated', this.setSettings);
@@ -1292,6 +1292,9 @@ export class AppImManager extends EventListenerBase<{
       if(
         overlayCounter.isOverlayActive ||
         IGNORE_KEYS.has(key) ||
+        e.isComposing ||
+        key === 'Process' ||
+        e.keyCode === 229 ||
         !e.isTrusted // * ignore synthetic events
       ) return;
 
@@ -1522,13 +1525,25 @@ export class AppImManager extends EventListenerBase<{
 
           default: { // peerId
             const peerId = postId ? p.toPeerId(true) : p.toPeerId();
-            this.managers.appPeersManager.getPeer(peerId).then((peer) => {
-              this.op({
-                peer,
+            Promise.resolve(this.managers.appPeersManager.getPeer(peerId)).then((peer) => {
+              if(peer) {
+                return this.op({
+                  peer,
+                  lastMsgId: messageId,
+                  threadId,
+                  call: params.call
+                });
+              }
+
+              this.log.warn('hash peer missing, opening by id', peerId);
+              return this.setPeer({
+                peerId,
                 lastMsgId: messageId,
                 threadId,
-                call: params.call
+                type: ChatType.Chat
               });
+            }).catch((err) => {
+              this.log.error('hash peer open failed', err);
             });
             break;
           }
@@ -1600,7 +1615,12 @@ export class AppImManager extends EventListenerBase<{
 
     // open forum tab
     if(!commentId && !threadId && !lastMsgId && isForum) {
-      appDialogsManager.toggleForumTabByPeerId(peerId, true, true);
+      const forumTabPromise = appDialogsManager.toggleForumTabByPeerId(peerId, true, true);
+      if(!this.isSamePeer(this.chat, {peerId, type: ChatType.Chat})) {
+        await this.setPeer({peerId, type: ChatType.Chat});
+      }
+
+      await forumTabPromise;
       return;
     }
 

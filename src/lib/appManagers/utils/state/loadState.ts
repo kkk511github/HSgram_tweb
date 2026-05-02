@@ -259,7 +259,12 @@ async function loadStateForAccount(accountNumber: ActiveAccountNumber): Promise<
   commonWriter.readFromArray(arr.splice(0, COMMON_KEYS.length));
 
   const writer = StateWriter(log);
+  const stateSettingsIndex = ALL_KEYS.indexOf('settings');
+  const shouldMigrateCommonSettings = stateSettingsIndex !== -1 && arr[stateSettingsIndex] === undefined;
   writer.readFromArray(arr);
+  if(shouldMigrateCommonSettings && commonWriter.state.settings) {
+    writer.push('settings', copy(commonWriter.state.settings));
+  }
 
   if(accountData.userId) {
     writer.state.authState = {_: 'authStateSignedIn'};
@@ -319,6 +324,9 @@ async function loadOldState(): Promise<LoadStateResult> {
 
   const writer = StateWriter(log);
   writer.readFromArray(arr.splice(0, ALL_KEYS.length));
+  if(commonWriter.state.settings) {
+    writer.push('settings', copy(commonWriter.state.settings));
+  }
 
   const langPack = arr.shift();
   const auth = arr.shift() as UserAuth | number;

@@ -351,6 +351,11 @@ let init = () => {
   init = null;
 };
 
+const isCompositionInput = (e: Event) => {
+  const inputEvent = e as InputEvent;
+  return !!inputEvent && (inputEvent.isComposing || inputEvent.inputType === 'insertCompositionText');
+};
+
 // ! it doesn't respect symbols other than strongs
 /* const checkAndSetRTL = (input: HTMLElement) => {
   //const isEmpty = isInputEmpty(input);
@@ -682,7 +687,11 @@ export default class InputField {
     }
 
     if(onInputCallbacks.length) {
-      input.addEventListener('input', () => {
+      input.addEventListener('input', (e) => {
+        if(!plainText && isCompositionInput(e)) {
+          return;
+        }
+
         onInputCallbacks.forEach((callback) => callback());
       });
     }

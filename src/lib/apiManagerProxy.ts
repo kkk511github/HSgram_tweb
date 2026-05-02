@@ -315,10 +315,6 @@ class ApiManagerProxy extends MTProtoMessagePort {
 
     const commonEventNames = new Set<keyof BroadcastEvents>([
       'language_change',
-      'settings_updated',
-      'theme_changed',
-      'theme_change',
-      'background_change',
       'logging_out',
       'notification_count_update',
       'account_logged_in',
@@ -921,12 +917,13 @@ class ApiManagerProxy extends MTProtoMessagePort {
     this.dispatchUserAuth();
 
     const stateForThisAccount = loadedStates[getCurrentAccount()];
-    rootScope.settings = stateForThisAccount.common.settings;
+    const settings = stateForThisAccount.state.settings || stateForThisAccount.common.settings;
+    rootScope.settings = settings;
     this.newVersion = stateForThisAccount.newVersion;
     this.oldVersion = stateForThisAccount.oldVersion;
     this.mirrors['state'] = stateForThisAccount.state;
     setAppStateSilent(stateForThisAccount.state);
-    setAppSettingsSilent(stateForThisAccount.common.settings);
+    setAppSettingsSilent(settings);
 
     Object.defineProperty(rootScope, 'settings', {
       get: () => {
@@ -1198,8 +1195,7 @@ class ApiManagerProxy extends MTProtoMessagePort {
 
   private onMirrorTask = (payload: MirrorTaskPayload) => {
     const {name, key, value, accountNumber} = payload;
-    const isSettingsUpdate = name === 'state' && key === 'settings';
-    if(!isSettingsUpdate && accountNumber !== getCurrentAccount()) return;
+    if(accountNumber !== getCurrentAccount()) return;
 
     const result = this.processMirrorTaskMap[name]?.(payload);
     if(result === false) {

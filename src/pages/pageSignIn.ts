@@ -33,6 +33,45 @@ import PasskeyLoginButton from '@components/passkeyLoginButton';
 let btnNext: HTMLButtonElement = null,
   btnQr: HTMLButtonElement,
   passkeyButton: ReturnType<typeof PasskeyLoginButton>;
+let restoreSubmitControls: (() => void) | undefined;
+let submitGeneration = 0;
+
+const AUTH_REQUEST_TIMEOUT_MS = 90000;
+const AUTH_REQUEST_TIMEOUT = 'AUTH_REQUEST_TIMEOUT';
+
+const withAuthTimeout = <T>(request: () => Promise<T>) => {
+  let timeoutId: number;
+  const requestPromise = Promise.resolve().then(request);
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject({type: AUTH_REQUEST_TIMEOUT}), AUTH_REQUEST_TIMEOUT_MS);
+  });
+
+  return Promise.race([requestPromise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+};
+
+const getSubmitControls = () => {
+  return [btnNext, btnQr, passkeyButton?.button].filter(Boolean) as HTMLElement[];
+};
+
+const resetSubmitControls = (invalidatePendingRequest = false) => {
+  if(invalidatePendingRequest) {
+    ++submitGeneration;
+  }
+
+  restoreSubmitControls?.();
+  restoreSubmitControls = undefined;
+
+  if(btnNext) {
+    replaceContent(btnNext, i18n('Login.Next'));
+    ripple(btnNext);
+  }
+
+  getSubmitControls().forEach((btn) => {
+    btn.removeAttribute('disabled');
+  });
+};
 
 const onFirstMount = () => {
   /* if(Modes.test) {
@@ -122,7 +161,10 @@ const onFirstMount = () => {
       cancelEvent(e);
     }
 
-    const toggle = toggleDisability([/* telEl, countryInput,  */btnNext, btnQr, passkeyButton?.button].filter(Boolean), true);
+    resetSubmitControls(true);
+
+    const generation = ++submitGeneration;
+    restoreSubmitControls = toggleDisability(getSubmitControls(), true);
 
     replaceContent(btnNext, i18n('PleaseWait'));
     putPreloader(btnNext);
@@ -130,7 +172,7 @@ const onFirstMount = () => {
     // return;
 
     const phone_number = telInputField.value;
-    rootScope.managers.apiManager.invokeApi('auth.sendCode', {
+    withAuthTimeout(() => rootScope.managers.apiManager.invokeApi('auth.sendCode', {
       phone_number: phone_number,
       api_id: App.id,
       api_hash: App.hash,
@@ -139,8 +181,13 @@ const onFirstMount = () => {
         pFlags: {}
       }
       // lang_code: navigator.language || 'en'
-    }).then(async(code) => {
+    })).then(async(code) => {
       // console.log('got code', code);
+      if(generation !== submitGeneration) {
+        return;
+      }
+
+      resetSubmitControls();
 
       if(code._ === 'auth.sentCodeSuccess') {
         const {authorization} = code;
@@ -155,13 +202,22 @@ const onFirstMount = () => {
 
       import('./pageAuthCode').then((m) => m.default.mount(Object.assign(code, {phone_number: phone_number})));
     }).catch((err) => {
-      toggle();
+      if(generation !== submitGeneration) {
+        return;
+      }
+
+      resetSubmitControls();
 
       switch(err.type) {
         case 'PHONE_NUMBER_INVALID':
           telInputField.setError();
           replaceContent(telInputField.label, i18n('Login.PhoneLabelInvalid'));
           telEl.classList.add('error');
+          replaceContent(btnNext, i18n('Login.Next'));
+          break;
+        case AUTH_REQUEST_TIMEOUT:
+          telInputField.setError('Error.AnError');
+          replaceContent(telInputField.label, '发送验证码超时，请检查网络后重试');
           replaceContent(btnNext, i18n('Login.Next'));
           break;
         default:
@@ -203,6 +259,7 @@ const onFirstMount = () => {
   });
 
   inputWrapper.append(...[countryInputField.container, telInputField.container, btnNext, btnQr, passkeyButton?.button].filter(Boolean));
+  resetSubmitControls(true);
 
   const h4 = document.createElement('h4');
   h4.classList.add('text-center');
@@ -284,14 +341,7 @@ const onFirstMount = () => {
 };
 
 const page = new Page('page-sign', true, onFirstMount, () => {
-  if(btnNext) {
-    replaceContent(btnNext, i18n('Login.Next'));
-    ripple(btnNext);
-  }
-
-  [btnNext, btnQr, passkeyButton?.button].filter(Boolean).forEach((btn) => {
-    btn.removeAttribute('disabled');
-  });
+  resetSubmitControls(true);
 
   rootScope.managers.appStateManager.pushToState('authState', {_: 'authStateSignIn'});
 });

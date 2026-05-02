@@ -80,9 +80,14 @@ export default class AppStateManager {
 
     if(key === 'settings') {
       this.onSettingsUpdate?.(value as StateSettings);
-      return commonStateStorage.set({
-        [key]: value
-      }, onlyLocal);
+      commonStateStorage.get('settings', false).then((settings) => {
+        return commonStateStorage.set({
+          settings: {
+            ...settings,
+            passcode: (value as StateSettings).passcode
+          }
+        }, onlyLocal);
+      });
     }
 
     return this.storage.set({

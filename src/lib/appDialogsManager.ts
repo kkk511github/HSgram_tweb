@@ -526,6 +526,7 @@ export class AppDialogsManager {
   public processContact: (peerId: PeerId) => void;
 
   private initedListeners = false;
+  private initedStableChatListClickListener = false;
 
   public onListLengthChange: () => Promise<void>;
   private allChatsIntlElement: I18n.IntlElement;
@@ -739,6 +740,8 @@ export class AppDialogsManager {
     mediaSizes.addEventListener('resize', () => {
       this.changeFiltersAllChatsKey();
     });
+
+    this.initStableChatListClickListener();
 
     this.chatsContainer.append(bottomPart);
 
@@ -1781,6 +1784,123 @@ export class AppDialogsManager {
     window.open(url, '_blank');
   }
 
+  private initStableChatListClickListener() {
+    if(this.initedStableChatListClickListener) {
+      return;
+    }
+
+    this.initedStableChatListClickListener = true;
+
+    this.folders.container.addEventListener('click', (e) => {
+      if(e.defaultPrevented || e.button !== 0) {
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      const elem = findUpTag(target, DIALOG_LIST_ELEMENT_TAG);
+      if(!elem || !this.folders.container.contains(elem)) {
+        return;
+      }
+
+      cancelEvent(e);
+
+      const list = elem.closest('.chatlist') as HTMLElement;
+      if(list && !list.dataset.dialogClickListener) {
+        this.setListClickListener({
+          list,
+          onFound: null,
+          withContext: true,
+          withArchiveContext: this.filterId === FOLDER_ID_ALL
+        });
+      }
+
+      this.openDialogElementFromStableList(e, elem);
+    });
+  }
+
+  private openDialogElementFromStableList(e: MouseEvent, elem: HTMLElement) {
+    const peerId = elem.dataset.peerId.toPeerId();
+    const lastMsgId = +elem.dataset.mid || undefined;
+    const threadId = +elem.dataset.threadId || undefined;
+    const monoforumParentPeerId = +elem.dataset.monoforumParentPeerId || undefined;
+    const openOptions: Parameters<typeof appImManager.setPeer>[0] = {
+      peerId: monoforumParentPeerId || peerId,
+      monoforumThreadId: monoforumParentPeerId ? peerId : undefined,
+      lastMsgId,
+      threadId
+    };
+
+    const isOpenedChat = () => appImManager.chat && appImManager.isSamePeer(appImManager.chat, openOptions as any);
+    const openChat = () => {
+      const promise = Promise.resolve(appImManager.setPeer(openOptions as any)).catch((err) => {
+        this.log.error('stable dialogs click open failed', err);
+      });
+
+      setTimeout(() => {
+        if(isOpenedChat()) {
+          return;
+        }
+
+        Promise.resolve(appImManager.setPeer(openOptions as any)).catch((err) => {
+          this.log.error('stable dialogs click retry failed', err);
+        });
+      }, 250);
+
+      return promise;
+    };
+
+    if(e.ctrlKey || e.metaKey) {
+      this.openDialogInNewTab(elem);
+      return true;
+    }
+
+    const openChatAfterDrawerChange = (promise: Promise<unknown> | void) => {
+      Promise.resolve(promise).catch((err) => {
+        this.log.error('stable dialogs drawer toggle failed', err);
+      }).then(() => {
+        if(isOpenedChat() || mediaSizes.isLessThanFloatingLeftSidebar) {
+          return;
+        }
+
+        openChat();
+      });
+    };
+
+    const peer = apiManagerProxy.getPeer(peerId);
+    const linkedChat = peer?._ === 'channel' && peer?.pFlags?.monoforum && peer?.linked_monoforum_id ?
+      apiManagerProxy.getChat(peer.linked_monoforum_id) :
+      undefined;
+
+    if(
+      linkedChat?._ === 'channel' &&
+      linkedChat?.admin_rights?.pFlags?.manage_direct_messages &&
+      !elem.dataset.isAllChats &&
+      !lastMsgId &&
+      !e.shiftKey
+    ) {
+      openChatAfterDrawerChange(this.toggleForumTabByPeerId(peerId));
+      return true;
+    }
+
+    if(peer?._ === 'user' && peer?.pFlags?.bot_forum_view && !lastMsgId && !threadId && !elem.dataset.isAllChats && !e.shiftKey) {
+      openChatAfterDrawerChange(this.toggleForumTabByPeerId(peerId));
+      return true;
+    }
+
+    const isForum = !!elem.querySelector('.is-forum');
+    if(isForum && !e.shiftKey && !lastMsgId) {
+      openChatAfterDrawerChange(this.toggleForumTabByPeerId(peerId, undefined, false));
+      return true;
+    }
+
+    if((!threadId && !monoforumParentPeerId || lastMsgId) && this.xd !== this.xds[FOLDER_ID_ARCHIVE]) {
+      this.toggleForumTab();
+    }
+
+    openChat();
+    return true;
+  }
+
   public setListClickListener({
     list,
     onFound,
@@ -1825,21 +1945,66 @@ export class AppDialogsManager {
 
     const setWillOpenStory = (e: Event) => willOpenStory = !isOpeningStoriesDisabled() && !!getOpenStoryCallback(e.target);
 
+    list.dataset.dialogClickListener = '1';
     list.dataset.autonomous = '' + +autonomous;
     let handledPointerDownClick = false;
 
-    const openDialogFromEvent = (e: MouseEvent, elem: HTMLElement) => {
+    const getOpenOptionsFromElement = (elem: HTMLElement) => {
       const peerId = elem.dataset.peerId.toPeerId();
       const lastMsgId = +elem.dataset.mid || undefined;
       const threadId = +elem.dataset.threadId || undefined;
       const monoforumParentPeerId = +elem.dataset.monoforumParentPeerId || undefined;
-
-      const openChat = () => setPeerFunc({
+      const openOptions: Parameters<typeof setPeerFunc>[0] = {
         peerId: monoforumParentPeerId || peerId,
         monoforumThreadId: monoforumParentPeerId ? peerId : undefined,
         lastMsgId,
         threadId: threadId
-      });
+      };
+
+      return {peerId, lastMsgId, threadId, monoforumParentPeerId, openOptions};
+    };
+
+    const isOpenedChatWithOptions = (openOptions: Parameters<typeof setPeerFunc>[0]) => {
+      return appImManager.chat && appImManager.isSamePeer(appImManager.chat, openOptions as any);
+    };
+
+    const isOpenedDialogElement = (elem: HTMLElement) => {
+      const {openOptions} = getOpenOptionsFromElement(elem);
+      return isOpenedChatWithOptions(openOptions);
+    };
+
+    const openDialogFromEvent = (e: MouseEvent, elem: HTMLElement) => {
+      const {peerId, lastMsgId, threadId, monoforumParentPeerId, openOptions} = getOpenOptionsFromElement(elem);
+      const isOpenedChat = () => appImManager.chat && appImManager.isSamePeer(appImManager.chat, openOptions as any);
+      const openChat = () => {
+        const promise = Promise.resolve(setPeerFunc(openOptions as any)).catch((err) => {
+          this.log.error('dialogs click open failed', err);
+        });
+
+        setTimeout(() => {
+          if(isOpenedChat()) {
+            return;
+          }
+
+          Promise.resolve(setPeerFunc(openOptions as any)).catch((err) => {
+            this.log.error('dialogs click retry failed', err);
+          });
+        }, 250);
+
+        return promise;
+      };
+
+      const openChatAfterDrawerChange = (promise: Promise<unknown> | void) => {
+        Promise.resolve(promise).catch((err) => {
+          this.log.error('dialogs drawer toggle failed', err);
+        }).then(() => {
+          if(isOpenedChat() || mediaSizes.isLessThanFloatingLeftSidebar) {
+            return;
+          }
+
+          openChat();
+        });
+      };
 
       const isSponsored = elem.dataset.sponsored === 'true';
       if(isSponsored) {
@@ -1871,23 +2036,19 @@ export class AppDialogsManager {
         !lastMsgId &&
         !e.shiftKey
       ) {
-        this.toggleForumTabByPeerId(peerId).then(() => {
-          if(appImManager.chat?.peerId?.toChatId() !== linkedChat?.id && !mediaSizes.isLessThanFloatingLeftSidebar) openChat();
-        });
+        openChatAfterDrawerChange(this.toggleForumTabByPeerId(peerId));
         return true;
       }
 
 
       if(peer?._ === 'user' && peer?.pFlags?.bot_forum_view && !lastMsgId && !threadId && !elem.dataset.isAllChats && !e.shiftKey) {
-        this.toggleForumTabByPeerId(peerId).then(() => {
-          if(appImManager.chat?.peerId?.toUserId() !== peer.id && !mediaSizes.isLessThanFloatingLeftSidebar) openChat();
-        });
+        openChatAfterDrawerChange(this.toggleForumTabByPeerId(peerId));
         return true;
       }
 
       const isForum = !!elem.querySelector('.is-forum');
       if(isForum && !e.shiftKey && !lastMsgId) {
-        this.toggleForumTabByPeerId(peerId, undefined, false);
+        openChatAfterDrawerChange(this.toggleForumTabByPeerId(peerId, undefined, false));
         return true;
       }
 
@@ -1960,9 +2121,9 @@ export class AppDialogsManager {
         cancelEvent(e);
       }
 
-      if(e.button === 0 && !handledPointerDownClick && !willOpenStory) {
+      if(e.button === 0 && !willOpenStory) {
         const elem = findUpTag(e.target as HTMLElement, DIALOG_LIST_ELEMENT_TAG);
-        if(elem) {
+        if(elem && (!handledPointerDownClick || !isOpenedDialogElement(elem))) {
           this.log('dialogs click fallback');
           openDialogFromEvent(e, elem);
         }

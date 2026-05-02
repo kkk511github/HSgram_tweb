@@ -443,7 +443,8 @@ export const STATE_INIT: State = {
   appConfig: {} as any,
   accountThemes: {} as any,
   dontShowPaidMessageWarningFor: [],
-  accountContentSettings: {} as any
+  accountContentSettings: {} as any,
+  settings: SETTINGS_INIT
 };
 
 export const COMMON_STATE_INIT: CommonState = {
